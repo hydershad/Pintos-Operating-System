@@ -1,0 +1,6 @@
+# Pint-os setup
+.PINTOS_PATH
+utils/qemu
+
+#Object Files
+*.o

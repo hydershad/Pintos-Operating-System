@@ -1,0 +1,211 @@
+		     +-------------------------- 
+       	     |        EE461S		    |
+		     | PROJECT 2: USER PROGRAMS	|
+		     | 	   DESIGN DOCUMENT     	|
+		     +--------------------------+
+---- GROUP ----
+>> Fill in the names and email addresses of your group members.
+
+Kiptoo Tonui <ktonui@utexas.edu>
+Hyder Shad <hydershad@me.com>
+
+---- PRELIMINARIES ----
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+We submitted this design document after our git submission within one week of the Lab2 deadline.
+
+			   ARGUMENT PASSING
+			   ================
+---- DATA STRUCTURES ----
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+FROM: process.h			
+
+	struct pcb_t {
+
+	  pid_t pid;        //child tid
+	  int load_status; // if process loaded properly in setup stages
+	  int exit_status; // if process exited normally
+	  int dead;         //whether thread has been killed or exited normal
+	  int waiting;  //if process is waiting already
+	  struct thread *parent;    //pointer to parent thread/process
+	  struct semaphore load;  //semaphores for load/exit status
+	  struct semaphore exit;
+	  struct semaphore p_wait;  //semaphores for process wait and process exec
+	  struct semaphore p_exec;
+	  struct list_elem elem;  //structure just like in main threads structure to contain elements
+	};
+
+This is the process control block which stores information about each thread 
+regarding its pid, load/exit/waiting/terminated status, pointer to parent, list of elements, and semaphores.
+
+---- ALGORITHMS ----
+>> A2: Briefly describe how you implemented argument parsing. How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+We use the strtok_r function to split tokenize the string by spaces. Then push each token onto the stack. Doing
+so puts the arguments in reverse order of what the program expects, but since we use pointers for our program arguments,
+we place the pointers in order. To avoid overflowing, we keep track of number of bytes that will be written to the stack.
+If a stack overflow occurs, we return an error.
+
+---- RATIONALE ----
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+strotk_r is the reentrant function call to split a string by delimiters.
+This allows the input to be parsed multiple times from where the last function 
+call returned from in the string, making it easy to parse command line inputs and arguments.
+In addition, it is multi-threaded safe allowing for multiple processes to call it at the same
+time.
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+No new/modified structures for syscall.c/.h
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+Every process has an independent set of file descriptors. Every open file has at minimum 
+one file descriptor, and each time a file is opened by a process, a new file descriptor
+is returned. The file descriptor points to a global file table managed by the kernel that 
+has information including the access restrictions for that particular data stream such
+as read-only, read-write, write-only.
+
+---- ALGORITHMS ----
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+From syscall functions to read and write to memory, we read in the arguments passed into memory from the cmd line
+and then test to see whether the buffer and filename/descriptors provided are valid. If they are we aquire the lock
+for the file system and execute a read/write using the address in the filedescriptor to/from the buffer, and then 
+release the lock on the file system. If the arguments passed in are not valid, we ensure that all locks we had are
+released and store the correct error code in the EAX register or call exit_proc(), passing in the error code.
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+The page could have all of the data allcoated contiguously in physical memory so just one pte is required,
+or each byte could be non-contiguous, requiring 1024 ptes/calls. For two bytes, best case is one call, worst case is two calls.
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+SYS_WAIT gets the thread id of the child process from memory and calls process wait, passing in the child's tid.
+process_wait() then goes through the list in the current thread's pcb until it either finds the child process or
+is unable to, in which case it returns an error code. The function then determines if the child process is dead,
+already being waited on, or sema_down on the wait semaphore and set it to waiting. The exit status is returned
+into the EAX register and the child's resources are freed. SYS_WAIT allows the parent thread to see if a
+spawned process has completed successfully or not and free the child's pcb block once terminated.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+A clean way to handle errors is by having functions to print out error messages, free resources, and halt
+execution or return to the caller if bad pointers or invalid accesses occur. One of the functions we implemented
+to handle errors was exit_proc(int exit_status) which based on the error code would terminate the process accordingly,
+print out the results, and free the resources while storing the pertinent information into the EAX register. This simplified
+a lot of the syscall code into a single function that could cleanly handle most error checking. is_user_vaddr was a function
+that was also heavily used to handle errors neatly.
+...
+When an error was detected, in the exit_proc() funtion we would check to see if the process was holding onto any file system locks
+and subsequently release them, along with setting the thread's exit status, removing the thread from all lists, and destroying its
+pcb and allocated pages in memory. This is done through the functions exit_proc(), thread_exit(), thread_tail(), and in some cases
+process_wait();  
+
+---- SYNCHRONIZATION ----
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+If loading the new executable fails, we set the current thread's pcb load_status
+with the error code (-1 in this case). Additionally if the process_execute fails, we store 
+the result into the EAX register. The calling thread can then access these values to determine 
+if the process_execute command was successful of not.
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+process_wait() checks to see if the child thread is already being waited on for it to exit. We ensure 
+race conditions do not happen if the child has not exited yet by using sema_down and setting a waiting 
+flag in the child's pcb to 1. If the child has already exited, process_wait() first checks the alive status 
+in the child's pcb and does not proceed if the thread has already been terminated. The parent process is allowed
+to terminate before the child process has exited, and the child's pointer to the parent process in its pcb is
+set to null to indicate it is orphaned. After a child process has exited, all of its resources are freed through page_free() and it is removed from the parent's pcb.
+
+---- RATIONALE ----
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+We designed our syscalls to check for particular corner cases in order to handle errors, such as null pointers,
+null buffers, and invalid user addresses. Our functions were designed primarily around error handling.
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+We aren't able to transfer data directly from one file to another for instance, as we limit ourselves to one file descriptor at a time.
+We do check to see if the file descriptor is valid, but could implement more checks to ensure access rights are not violated.
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+Another implementation could use a system where the high two bytes held the thread ID
+and the low two bytes the process ID, that way a process would be instantly recognizeable with a thread.
+Disadvantage would be extra parsing required and smaller possible number of total unique thread/process IDs.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+>> Any other comments?
+
+Pintos starter code the hardest part to navigate.
+It is a lot of code and I do understand that being able to demystify code is
+definitely a necessity in the industry. However I do wish we spent a little time in class going through what each
+of the other files in the pintos project do. Otherwise I enjoyed this lab.
+

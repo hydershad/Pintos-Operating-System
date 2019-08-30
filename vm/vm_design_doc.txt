@@ -1,0 +1,191 @@
+       	    +---------------------------+
+		    |		CS 140		        |
+		    | PROJECT 3: VIRTUAL MEMORY	|
+		    |	   DESIGN DOCUMENT	    |
+		    +---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Hyder Shad <hydershad@me.com>
+Kiptoo Tonui <ktonui@utexas.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+NOTE: We were not able to sucecssfully implement VM, so not all functions were finished or implemented.
+Just tried answering as best I could.
+
+			PAGE TABLE MANAGEMENT
+			=====================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+/* Denotes where current page is */
+enum page_loc {
+  FROM_FILESYS, /* Frome a file or executable */
+  IN_FRAME,   /* Is already in memory */
+  SWAP,     /* Swapped out */
+  ALL_ZERO /* Initialized */
+};
+
+struct supplemental_page_table {	//contains info about the page address, type, properties
+  uint8_t* kpage; /* Kernel page associated with it */
+  uint8_t* upage; /* Virtual address */
+
+  enum page_loc pg_loc;
+  bool writable;  /* Is page writable */
+  bool dirty;     /* Has page been modified */
+
+  struct file* file;		//pointer to a file structure
+  off_t offset;			
+  size_t pg_read_bytes;
+  size_t pg_zero_bytes;
+  struct hash_elem hash_elem;		//hashtable structure to find pages
+};
+
+---- ALGORITHMS ----
+
+>> A2: In a few paragraphs, describe your code for locating the frame,
+>> if any, that contains the data of a given page.
+
+We go through the frames until we find the ones corresponding to the process id and access the associated page 
+starting address from the frame structure.
+
+---- SYNCHRONIZATION ----
+
+>> A3: When two user processes both need a new frame at the same time,
+>> how are races avoided?
+
+Locks are implemented in the frame access functions. We were in the process of trying to implement more 
+specialized locks for each frame rather than for all frames, which would allow processes to access different 
+frames at the same time.
+
+---- RATIONALE ----
+
+>> A4: Why did you choose the data structure(s) that you did for
+>> representing virtual-to-physical mappings?
+
+The hash table allowed us to easily identify the pages we needed for a process and the physical address based on the keys 
+such as spte for that thread and the associated thread hash elements.
+
+		       PAGING TO AND FROM DISK
+		       =======================
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct frame_table_entry {	//contains information for each frame about which process it belongs to, phys address, and the spte
+    tid_t process_id;
+    struct sup_pte *spte;
+    void *frame_addr;
+    bool modify;
+};
+
+
+---- ALGORITHMS ----
+
+>> B2: When a frame is required but none is free, some frame must be
+>> evicted.  Describe your code for choosing a frame to evict.
+
+We first cycle through all frames not belonging to the curernt thread that have either not been accessed or the dirty bit has not 
+been set so we can avoid removing data another process may actively be using. If all frames belong to the same process, we evict one
+from the current process using the same method.
+
+>> B3: When a process P obtains a frame that was previously used by a
+>> process Q, how do you adjust the page table (and any other data
+>> structures) to reflect the frame Q no longer has?
+
+Overwrite all associated members in the page structure with P's data.
+
+>> B4: Explain your heuristic for deciding whether a page fault for an
+>> invalid virtual address should cause the stack to be extended into
+>> the page that faulted.
+
+Stack growth was not fully implemented, but we can check to see whether the page fault is the result of a stack address or not 
+and then grow the stack accordingly to gracefully handle the fault rather than just calling a panic.
+
+---- SYNCHRONIZATION ----
+
+>> B5: Explain the basics of your VM synchronization design.  In
+>> particular, explain how it prevents deadlock.  (Refer to the
+>> textbook for an explanation of the necessary conditions for
+>> deadlock.)
+
+We didn't finish implementing all the VM synchronization, but we use locks around some of the frame and swap in/out functions to prevent 
+race conditions. As for deadlocks, we have just these two sections of code/tasks so we minimize chances of deadlock.
+
+>> B6: A page fault in process P can cause another process Q's frame
+>> to be evicted.  How do you ensure that Q cannot access or modify
+>> the page during the eviction process?  How do you avoid a race
+>> between P evicting Q's frame and Q faulting the page back in?
+
+We use a lock around the frame eviction process so Q cannot access the page
+
+>> B7: Suppose a page fault in process P causes a page to be read from
+>> the file system or swap.  How do you ensure that a second process Q
+>> cannot interfere by e.g. attempting to evict the frame while it is
+>> still being read in?
+
+We use a system of locks for the swap in/out funtions and make sure that our eviction policy tries to identify frames 
+that do not have the accessed or at least the dirty bit set.
+
+>> B8: Explain how you handle access to paged-out pages that occur
+>> during system calls.  Do you use page faults to bring in pages (as
+>> in user programs), or do you have a mechanism for "locking" frames
+>> into physical memory, or do you use some other design?  How do you
+>> gracefully handle attempted accesses to invalid virtual addresses?
+
+We use a lock for the frames when trying to get a new page. If a frame needs to eb swapped in, we directly call a function 
+"frame_swap" which initiates our eviction policy.
+
+---- RATIONALE ----
+
+>> B9: A single lock for the whole VM system would make
+>> synchronization easy, but limit parallelism.  On the other hand,
+>> using many locks complicates synchronization and raises the
+>> possibility for deadlock but allows for high parallelism.  Explain
+>> where your design falls along this continuum and why you chose to
+>> design it this way.
+
+Ours falls towards the limited side in terms of parallelism. We use a single lock structure for frame, swap, and page systems.
+We went with this route for simplicity. However, we realize this doesn't allow for two threads 
+to access totally different frames for example at the same time or swap out two unrelated pages simultaneously.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?

@@ -1,4 +1,3 @@
-# Pintos-Operating-System
 # How to install pintos
 
 0. Make sure that the dependencies have been installed:
@@ -106,4 +105,3 @@ Open up a new terminal tab with the shortcut Ctrl-Shift-t
    - Then you're all set
 
 For a debugging demonstration in video form, please check out this [video](https://utexas.app.box.com/s/2r357h16t4xc1xeg3kva69i754ie18yf).
-
