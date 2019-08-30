@@ -1,3 +1,66 @@
+# Pintos OS
+Pintos is a simple operating system framework for the 80x86 architecture. It supports kernel threads, loading and running user programs, and a file system, but it implements all of these in a very simple way. 
+
+Here are the following files that have been written by Hyder Shad and Kiptoo Touni:
+
+In Userprog
+
+   process.c 
+
+   process.h 
+   Loads ELF binaries and starts processes. 
+
+   pagedir.c 
+
+   pagedir.h 
+   A simple manager for 80x86 hardware page tables. Although you probably won't want to modify this code for this project, you may want to call some of its functions. See section 4.1.2.3 Page Tables, for more information. 
+
+   syscall.c 
+
+   syscall.h 
+   Whenever a user process wants to access some kernel functionality, it invokes a system call. This is a skeleton system call handler. Currently, it just prints a message and terminates the user process. In part 2 of this project you will add code to do everything else needed by system calls. 
+
+   exception.c 
+
+   exception.h 
+   When a user process performs a privileged or prohibited operation, it traps into the kernel as an "exception" or "fault."(3) These files handle exceptions. Currently all exceptions simply print a message and terminate the process. Some, but not all, solutions to project 2 require modifying page_fault() in this file. 
+
+In Virtual Memory
+
+   All files
+   
+In Filesystems
+
+   fsutil.c 
+   Simple utilities for the file system that are accessible from the kernel command line. 
+
+   filesys.h 
+
+   filesys.c 
+   Top-level interface to the file system. See section 3.1.2 Using the File System, for an introduction. 
+
+   directory.h 
+
+   directory.c 
+   Translates file names to inodes. The directory data structure is stored as a file. 
+
+   inode.h 
+
+   inode.c 
+   Manages the data structure representing the layout of a file's data on disk. 
+
+   file.h 
+
+   file.c 
+   Translates file reads and writes to disk sector reads and writes. 
+
+   lib/kernel/bitmap.h 
+
+   lib/kernel/bitmap.c 
+   A bitmap data structure along with routines for reading and writing the bitmap to disk files. 
+
+
+
 # How to install pintos
 
 0. Make sure that the dependencies have been installed:
